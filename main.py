@@ -1,6 +1,7 @@
 # ИМПОРТЫ И ПЕРЕМЕННЫЕ
 
 import discord
+from discord import Embed
 from discord.ext import commands, tasks
 
 import sqlite3
@@ -107,6 +108,50 @@ async def start(ctx):
     # for reaction in reactions:
     #     await message.add_reaction(reaction)
     
+previous_message = None
+
+@bot.command()
+async def startgame(ctx):
+    global previous_message
+    instructions = await ctx.send('Да начнется игра:')
+    previous_message = instructions
+
+previous_messages = defaultdict(lambda: None)
+
+@bot.command()
+async def startgame(ctx):
+    global previous_messages
+    instructions = await ctx.send('Да начнется игра:')
+    previous_messages[ctx.author.id] = instructions
+
+from collections import defaultdict
+
+@bot.command()
+async def add_text(ctx, *, new_text):
+    global previous_messages
+
+    if previous_messages[ctx.author.id]:
+        # Разделяем текст на числа и слова с помощью регулярных выражений
+        numbers = re.findall(r'\d+', new_text)
+        words = re.findall(r'\b\w+\b', new_text)
+
+        # Создаем текстовые блоки для чисел и слов
+        numbers_block = 'Числа: ' + ', '.join(numbers) if numbers else 'Нет чисел'
+        words_block = 'Слова: ' + ', '.join(words) if words else 'Нет слов'
+
+        # Создаем Embed объект с двумя полями для чисел и слов
+        embed = Embed(color=ctx.author.color)
+        embed.add_field(name='Числа', value=numbers_block, inline=False)
+        embed.add_field(name='Слова', value=words_block, inline=False)
+        
+        # Создаем новое сообщение с Embed объектом
+        await previous_messages[ctx.author.id].delete()  # Удаляем предыдущее сообщение пользователя
+        previous_messages[ctx.author.id] = await ctx.send(embed=embed)
+        await ctx.send("Текст успешно добавлен к предыдущему сообщению.")
+    else:
+        await ctx.send("Предыдущее сообщение бота не найдено.")
+
+
 @bot.command()
 async def bet(ctx, bet):
     # if ctx.bot.game_choice is None:
@@ -171,12 +216,34 @@ async def game(ctx, member: discord.Member = None):
 # КОНЕЦ ФУНКЦИЙ СВЯЗАННЫХ С РУЛЕТКОЙ    
 
 
-#УН
-@bot.command
+# КОММАНДА !HELP 
+@bot.command(pass_context = True)
 async def help(ctx):
     emb = discord.Embed(title = 'Навигация по коммандам')
-    ctx.message.channel.send("тут будет инфа")
+    emb.add_field(name= '{}start'.format(settings['PREFIX']), value = 'Начало рулетки')
 
+    await ctx.send(embed = emb)
+
+# КЛИКЕР
+    @bot.command()
+    async def work(ctx):
+        instructions = await ctx.send('Нажми, чтобы залутать шекели:')
+        await instructions.add_reaction('🍎')
+
+
+        ctx.bot.game_choice = None  # Initialize the choice
+
+        def check(reaction, user):
+            return user == ctx.message.author and reaction.emoji in ['🍎']
+
+        reaction, user = await bot.wait_for('reaction_add', check=check)
+        if reaction.emoji == '🍎':
+            ctx.bot.game_choice = 1
+
+@bot.command()
+async def text(ctx):
+    embed = Embed(color=ctx.author.color)
+    embed.add_field(name=':leaves:')
 
 bot.run(settings['TOKEN'])
 
