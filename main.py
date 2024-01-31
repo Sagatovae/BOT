@@ -11,6 +11,7 @@ from tabulate import tabulate
 import re
 import random
 from config import settings
+from collections import defaultdict  
 
 connection = sqlite3.connect('server.db')
 cursor = connection.cursor()
@@ -108,6 +109,7 @@ async def start(ctx):
     # for reaction in reactions:
     #     await message.add_reaction(reaction)
     
+  
 previous_message = None
 
 @bot.command()
@@ -116,21 +118,11 @@ async def startgame(ctx):
     instructions = await ctx.send('Да начнется игра:')
     previous_message = instructions
 
-previous_messages = defaultdict(lambda: None)
-
-@bot.command()
-async def startgame(ctx):
-    global previous_messages
-    instructions = await ctx.send('Да начнется игра:')
-    previous_messages[ctx.author.id] = instructions
-
-from collections import defaultdict
-
 @bot.command()
 async def add_text(ctx, *, new_text):
-    global previous_messages
+    global previous_message
 
-    if previous_messages[ctx.author.id]:
+    if previous_message:
         # Разделяем текст на числа и слова с помощью регулярных выражений
         numbers = re.findall(r'\d+', new_text)
         words = re.findall(r'\b\w+\b', new_text)
@@ -145,9 +137,8 @@ async def add_text(ctx, *, new_text):
         embed.add_field(name='Слова', value=words_block, inline=False)
         
         # Создаем новое сообщение с Embed объектом
-        await previous_messages[ctx.author.id].delete()  # Удаляем предыдущее сообщение пользователя
-        previous_messages[ctx.author.id] = await ctx.send(embed=embed)
-        await ctx.send("Текст успешно добавлен к предыдущему сообщению.")
+        await previous_message.delete()  # Удаляем предыдущее сообщение
+        previous_message = await ctx.send(embed=embed)
     else:
         await ctx.send("Предыдущее сообщение бота не найдено.")
 
@@ -167,27 +158,6 @@ async def bet(ctx, bet):
     if num <= 0:
         return await ctx.send("Число не может быть меньше или равно нулю!")
     return await ctx.send(f"Ставка: {num}")
-
-
-# @bot.event
-# async def on_reaction_add(reaction, user, ctx):
-#     bet_number = None
-#     if reaction.emoji == '🍎':
-#         bet_number = 1
-#     elif reaction.emoji == '🍊':
-#         bet_number = 2
-#     elif reaction.emoji == '🍇':
-#         bet_number = 3
-#     elif reaction.emoji == '🍒':
-#         bet_number = 4
-
-#     if bet_number is not None:
-#         rand = random.randint(1, 4)
-
-#         if bet_number == rand:
-#             await ctx.send(f'{user.mention}, вы выиграли! Загаданное число: {rand}')
-#         else:
-#             await ctx.send(f'{user.mention}, вы проиграли! Загаданное число: {rand}')
 
 
 @bot.command()
@@ -225,26 +195,7 @@ async def help(ctx):
     await ctx.send(embed = emb)
 
 # КЛИКЕР
-    @bot.command()
-    async def work(ctx):
-        instructions = await ctx.send('Нажми, чтобы залутать шекели:')
-        await instructions.add_reaction('🍎')
 
-
-        ctx.bot.game_choice = None  # Initialize the choice
-
-        def check(reaction, user):
-            return user == ctx.message.author and reaction.emoji in ['🍎']
-
-        reaction, user = await bot.wait_for('reaction_add', check=check)
-        if reaction.emoji == '🍎':
-            ctx.bot.game_choice = 1
-
-@bot.command()
-async def text(ctx):
-    embed = Embed(color=ctx.author.color)
-    embed.add_field(name=':leaves:')
 
 bot.run(settings['TOKEN'])
-
-
+    
