@@ -166,13 +166,9 @@ async def game(ctx):
         await ctx.send(f'{ctx.author.mention}, вы проиграли! Загаданное число: {rand}')
     
 
-
-
 @bot.command
 async def help(ctx):
     ctx.message.channel.send("тут будет инфа")
-
-
 
 
 bot.run(settings['TOKEN'])
