@@ -16,8 +16,6 @@ intents = discord.Intents().all()
 bot = commands.Bot(command_prefix=settings['PREFIX'], intents=intents)
 int_pattern = re.compile(r'^\s*[-+]?\d+\s*$')
 
-WALLET_DEFAULT = {"balance": 1000}
-
 
 @bot.event
 async def on_ready():
@@ -76,13 +74,14 @@ async def __award(ctx, member: discord.Member = None, amount: int = None):
 #     else:
 #         if amount is None:
 #             await ctx.send(f"**{ctx.author}, укажите сумму, которую хотите отнять**")
-#         elif amount < 1:
-#             await ctx.send(f"**{ctx.author}**, укажите сумму больше 1")
 #         else:
 #             cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(amount, member.id))
 #             connection.commit()
 
 #             await ctx.message.add_reaction('🔴')
+
+
+
 @bot.command()
 async def start(ctx):
     instructions = await ctx.send('Выберите ставку:')
@@ -110,7 +109,6 @@ async def start(ctx):
     # for reaction in reactions:
     #     await message.add_reaction(reaction)
     
-
 @bot.command()
 async def bet(ctx, bet):
     if ctx.bot.game_choice is None:
@@ -149,7 +147,7 @@ async def bet(ctx, bet):
 
 
 @bot.command()
-async def game(ctx):
+async def game(ctx, member: discord.Member = None):
     if ctx.bot.game_choice is None:
         await ctx.send('Используйте команду !start, чтобы начать игру.')
         return
@@ -158,12 +156,20 @@ async def game(ctx):
 
     rand = random.randint(1, 4)
 
+    if member is None:
+        member = ctx.author
+
     await ctx.send(f'Загаданное число: {rand}')
 
     if ctx.bot.game_choice == rand:
-        await ctx.send(f'{ctx.author.mention}, вы выиграли! Загаданное число: {rand}')
+        cursor.execute("UPDATE users SET cash = cash + 20 WHERE id = {}".format(member.id))
+        connection.commit()
+        await ctx.send(f'{member.mention}, вы выиграли! Загаданное число: {rand}')
     else:
-        await ctx.send(f'{ctx.author.mention}, вы проиграли! Загаданное число: {rand}')
+        cursor.execute("UPDATE users SET cash = cash - 20 WHERE id = {}".format(member.id))
+
+        connection.commit()
+        await ctx.send(f'{member.mention}, вы проиграли! Загаданное число: {rand}')
     
 
 @bot.command
