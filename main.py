@@ -1,3 +1,5 @@
+# ИМПОРТЫ И ПЕРЕМЕННЫЕ
+
 import discord
 from discord.ext import commands, tasks
 
@@ -14,8 +16,10 @@ cursor = connection.cursor()
 
 intents = discord.Intents().all()
 bot = commands.Bot(command_prefix=settings['PREFIX'], intents=intents)
+bot.remove_command('help')
 int_pattern = re.compile(r'^\s*[-+]?\d+\s*$')
 
+# КОНЕЦ ИМПОРТов И ПЕРЕМЕННЫХ
 
 @bot.event
 async def on_ready():
@@ -34,6 +38,10 @@ async def on_ready():
         else:
             pass
     connection.commit()
+
+
+
+# НАЧАЛО ФУНКЦИЙ СВЯЗАННЫХ С БАЛАНСОМ    
 @bot.event
 async def on_member_join(member):
     if cursor.execute(f"SELECT id FROM users WHERE id = {member.id}").fetchone() is None:
@@ -53,6 +61,7 @@ async def __balance(ctx, member: discord.Member = None):
         description= f"""Баланс пользователя **{member}** составляет **{cursor.execute("SELECT cash FROM users WHERE id = {}".format(member.id)).fetchone()[0]} :leaves:**"""
         ))
 @bot.command(aliases = ['award'])
+@commands.has_permissions(administrator = True)
 async def __award(ctx, member: discord.Member = None, amount: int = None):
     if member is None:
         await ctx.send(f"**{ctx.author}**, укажите пользователя, которому желаете выдать определенную сумму")
@@ -66,22 +75,11 @@ async def __award(ctx, member: discord.Member = None, amount: int = None):
             connection.commit()
 
             await ctx.message.add_reaction('🔴')
-            
-# @bot.command(aliases = ['take'])
-# async def __take(ctx, member: discord.Member = None, amount = None):
-#     if member is None:
-#         await ctx.send(f"**{ctx.author}**, укажите пользователя, у которого желаете отнять определенную сумму")
-#     else:
-#         if amount is None:
-#             await ctx.send(f"**{ctx.author}, укажите сумму, которую хотите отнять**")
-#         else:
-#             cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(amount, member.id))
-#             connection.commit()
 
-#             await ctx.message.add_reaction('🔴')
+# КОНЕЦ ФУНКЦИЙ СВЯЗАННЫХ С БАЛАНСОМ    
 
 
-
+# ФУНКЦИИ СВЯЗАННЫЕ С РУЛЕТКОЙ
 @bot.command()
 async def start(ctx):
     instructions = await ctx.send('Выберите ставку:')
@@ -111,11 +109,12 @@ async def start(ctx):
     
 @bot.command()
 async def bet(ctx, bet):
-    if ctx.bot.game_choice is None:
-        await ctx.send('Используйте команду !start, чтобы начать игру.')
-        return
+    # if ctx.bot.game_choice is None:
+    #     start_message = await ctx.send('Используйте команду !start, чтобы начать игру.')
+    message = await ctx.send(f"@{ctx.message.author.name} {bet}")
+    await message.edit(content='Ставка: {bet}')
     if ctx.message.author.bot:
-            return
+        return
 
     if not int_pattern.match(bet):
         return await ctx.send("Ошибка! Поставьте ставку!")
@@ -151,7 +150,6 @@ async def game(ctx, member: discord.Member = None):
     if ctx.bot.game_choice is None:
         await ctx.send('Используйте команду !start, чтобы начать игру.')
         return
-
     await ctx.send("Начало")
 
     rand = random.randint(1, 4)
@@ -170,11 +168,16 @@ async def game(ctx, member: discord.Member = None):
 
         connection.commit()
         await ctx.send(f'{member.mention}, вы проиграли! Загаданное число: {rand}')
-    
+# КОНЕЦ ФУНКЦИЙ СВЯЗАННЫХ С РУЛЕТКОЙ    
 
+
+#УН
 @bot.command
 async def help(ctx):
+    emb = discord.Embed(title = 'Навигация по коммандам')
     ctx.message.channel.send("тут будет инфа")
 
 
 bot.run(settings['TOKEN'])
+
+
