@@ -13,6 +13,7 @@ from tabulate import tabulate
 
 import re
 import random
+import math
 from config import settings
 from collections import defaultdict  
 
@@ -65,6 +66,8 @@ async def __balance(ctx, member: discord.Member = None):
         await ctx.send(embed = discord.Embed(
         description= f"""Баланс пользователя **{member}** составляет **{cursor.execute("SELECT cash FROM users WHERE id = {}".format(member.id)).fetchone()[0]} :leaves:**"""
         ))
+
+    await ctx.message.delete()
 @bot.command(aliases = ['award'])
 @commands.has_permissions(administrator = True)
 async def __award(ctx, member: discord.Member = None, amount: int = None):
@@ -94,28 +97,55 @@ async def startgame(ctx):
     previous_message = instructions
 
 @bot.command()
-async def add_text(ctx, *, new_text):
+async def bet(ctx, *, new_text):
     global previous_message
     global user_messages
+    valid_input = new_text.isdigit() and 0 <= int(new_text) <= 36 or int(new_text) == 00
+    if valid_input:
+        if ctx.author.id not in user_messages:
+            user_messages[ctx.author.id] = new_text
+        else:
+            user_messages[ctx.author.id] += f"\n{new_text}"
 
-    if ctx.author.id not in user_messages:
-        user_messages[ctx.author.id] = new_text
+        await ctx.message.delete()  # Удаляем сообщение пользователя
+
+        if previous_message:
+            updated_text = previous_message.content
+            for user_id, message in user_messages.items():
+                user = bot.get_user(user_id)
+                updated_text += f"\n\n**{user.name}:**\n{message}"
+
+            await previous_message.edit(content=updated_text)
+        else:
+            await ctx.send("Предыдущее сообщение бота не найдено.")
     else:
-        user_messages[ctx.author.id] += f"\n{new_text}"
+        await ctx.send("Неверный ввод. Пожалуйста, введите число от 0 (00) до 36.")
 
-    await ctx.message.delete()  # Удаляем сообщение пользователя
+client = discord.Client(intents=intents)
 
-    if previous_message:
-        updated_text = previous_message.content
-        for user_id, message in user_messages.items():
-            user = bot.get_user(user_id)
-            updated_text += f"\n\n**{user.name}:**\n{message}"
+@bot.command()
+async def on_message(ctx):
+    colors = ["black", "red"]
+    radius = 6  
+    chessboard = ""
+    for row in range(-radius, radius + 1):
+        for col in range(-radius, radius + 1):
+            distance = math.sqrt(row**2 + col**2)
+            if distance <= radius:
+                if distance <= radius - 1:
+                    chessboard += ":brown_square:"
+                else:
+                    if row == 0 and col == 0:
+                        chessboard += ":white_circle:"
+                    else:
+                        color = colors[int(distance) % 2]
+                        chessboard += f":{color}_circle:"
+            else:
+                chessboard += ":brown_square:"
+        chessboard += "\n"
 
-        await previous_message.edit(content=updated_text)
-    else:
-        await ctx.send("Предыдущее сообщение бота не найдено.")
-
-
+    embed = discord.Embed(title="Рулетка", description=chessboard, color=discord.Color.default())
+    await ctx.send(embed=embed)
 
 @bot.slash_command(name="sgame", description='Описание команды')
 async def sgame(ctx, foo: Option(str, #тип данных ввода
@@ -125,21 +155,21 @@ async def sgame(ctx, foo: Option(str, #тип данных ввода
     pass
 
 
-@bot.command()
-async def bet(ctx, bet):
-    # if ctx.bot.game_choice is None:
-    #     start_message = await ctx.send('Используйте команду !start, чтобы начать игру.')
-    message = await ctx.send(f"@{ctx.message.author.name} {bet}")
-    await message.edit(content='Ставка: {bet}')
-    if ctx.message.author.bot:
-        return
+# @bot.command()
+# async def bet(ctx, bet):
+#     # if ctx.bot.game_choice is None:
+#     #     start_message = await ctx.send('Используйте команду !start, чтобы начать игру.')
+#     message = await ctx.send(f"@{ctx.message.author.name} {bet}")
+#     await message.edit(content='Ставка: {bet}')
+#     if ctx.message.author.bot:
+#         return
 
-    if not int_pattern.match(bet):
-        return await ctx.send("Ошибка! Поставьте ставку!")
-    num = int(bet)
-    if num <= 0:
-        return await ctx.send("Число не может быть меньше или равно нулю!")
-    return await ctx.send(f"Ставка: {num}")
+#     if not int_pattern.match(bet):
+#         return await ctx.send("Ошибка! Поставьте ставку!")
+#     num = int(bet)
+#     if num <= 0:
+#         return await ctx.send("Число не может быть меньше или равно нулю!")
+#     return await ctx.send(f"Ставка: {num}")
 
 
 @bot.command()
@@ -173,14 +203,29 @@ async def game(ctx, member: discord.Member = None):
 async def help(ctx):
     emb = discord.Embed(title = 'Навигация по коммандам')
     emb.add_field(name= '{}start'.format(settings['PREFIX']), value = 'Начало рулетки')
-
+    emb.add_field(name= '{}balance'.format(settings['PREFIX']), value = 'Ваши деньги')
+    emb.add_field(name= '{}work'.format(settings['PREFIX']), value = 'Выдает 200:leaves:. Работает каждые 30 секунд')
+    emb.add_field(name= '{}award'.format(settings['PREFIX']), value = 'Выдает выбранному пользователю определенное количество денег (Доступно только администраторам)')
     await ctx.send(embed = emb)
-    
+    await ctx.message.delete()
+
+# Функция для заработка
+@commands.cooldown(1, 30, commands.BucketType.user)    
 @bot.command()
 async def work(ctx, member: discord.Member = None):
+    if member is None:
+        member = ctx.author
     cursor.execute("UPDATE users SET cash = cash + 200 WHERE id = {}".format(member.id))
     connection.commit()
-    await ctx.send(f'{member.mention}, вы получили 200 деняк')
+    await ctx.send(f'{member.mention}, **вы получили 200 :leaves:**!')
+    await ctx.message.delete()
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandOnCooldown):
+        retry_after = str(datetime.timedelta(seconds=error.retry_after)).split('.')[0]
+        await ctx.send(f'**Вы устали! Приходите через {retry_after}**')
 
+
+# Запуск бота
 bot.run(settings['TOKEN'])
     
