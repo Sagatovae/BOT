@@ -1,7 +1,10 @@
 # ИМПОРТЫ И ПЕРЕМЕННЫЕ
 
 import discord
-from discord import Embed
+import datetime
+from discord.ext import commands
+from discord import embeds
+from discord import Option
 from discord.ext import commands, tasks
 
 import sqlite3
@@ -79,38 +82,10 @@ async def __award(ctx, member: discord.Member = None, amount: int = None):
             await ctx.message.add_reaction('🔴')
 
 # КОНЕЦ ФУНКЦИЙ СВЯЗАННЫХ С БАЛАНСОМ    
-
-
-# ФУНКЦИИ СВЯЗАННЫЕ С РУЛЕТКОЙ
-@bot.command()
-async def start(ctx):
-    instructions = await ctx.send('Выберите ставку:')
-    await instructions.add_reaction('🍎')
-    await instructions.add_reaction('🍊')
-    await instructions.add_reaction('🍇')
-    await instructions.add_reaction('🍒')
-
-    ctx.bot.game_choice = None  # Initialize the choice
-
-    def check(reaction, user):
-        return user == ctx.message.author and reaction.emoji in ['🍎', '🍊', '🍇', '🍒']
-
-    reaction, user = await bot.wait_for('reaction_add', check=check)
-    if reaction.emoji == '🍎':
-        ctx.bot.game_choice = 1
-    elif reaction.emoji == '🍊':
-        ctx.bot.game_choice = 2
-    elif reaction.emoji == '🍇':
-        ctx.bot.game_choice = 3
-    elif reaction.emoji == '🍒':
-        ctx.bot.game_choice = 4
-    # message = await ctx.send(instructions)
-    # reactions = ['🍎', '🍊', '🍇', '🍒']
-    # for reaction in reactions:
-    #     await message.add_reaction(reaction)
     
   
 previous_message = None
+user_messages = {}  # Словарь для хранения сообщений каждого пользователя
 
 @bot.command()
 async def startgame(ctx):
@@ -121,26 +96,33 @@ async def startgame(ctx):
 @bot.command()
 async def add_text(ctx, *, new_text):
     global previous_message
+    global user_messages
+
+    if ctx.author.id not in user_messages:
+        user_messages[ctx.author.id] = new_text
+    else:
+        user_messages[ctx.author.id] += f"\n{new_text}"
+
+    await ctx.message.delete()  # Удаляем сообщение пользователя
 
     if previous_message:
-        # Разделяем текст на числа и слова с помощью регулярных выражений
-        numbers = re.findall(r'\d+', new_text)
-        words = re.findall(r'\b\w+\b', new_text)
+        updated_text = previous_message.content
+        for user_id, message in user_messages.items():
+            user = bot.get_user(user_id)
+            updated_text += f"\n\n**{user.name}:**\n{message}"
 
-        # Создаем текстовые блоки для чисел и слов
-        numbers_block = 'Числа: ' + ', '.join(numbers) if numbers else 'Нет чисел'
-        words_block = 'Слова: ' + ', '.join(words) if words else 'Нет слов'
-
-        # Создаем Embed объект с двумя полями для чисел и слов
-        embed = Embed(color=ctx.author.color)
-        embed.add_field(name='Числа', value=numbers_block, inline=False)
-        embed.add_field(name='Слова', value=words_block, inline=False)
-        
-        # Создаем новое сообщение с Embed объектом
-        await previous_message.delete()  # Удаляем предыдущее сообщение
-        previous_message = await ctx.send(embed=embed)
+        await previous_message.edit(content=updated_text)
     else:
         await ctx.send("Предыдущее сообщение бота не найдено.")
+
+
+
+@bot.slash_command(name="sgame", description='Описание команды')
+async def sgame(ctx, foo: Option(str, #тип данных ввода
+                                 name='роль', #имя опции (необязательно)
+                                 description='Bar', #описание опции
+                                 required=True)): #обязательность введения параметра для команды
+    pass
 
 
 @bot.command()
@@ -193,9 +175,12 @@ async def help(ctx):
     emb.add_field(name= '{}start'.format(settings['PREFIX']), value = 'Начало рулетки')
 
     await ctx.send(embed = emb)
-
-# КЛИКЕР
-
+    
+@bot.command()
+async def work(ctx, member: discord.Member = None):
+    cursor.execute("UPDATE users SET cash = cash + 200 WHERE id = {}".format(member.id))
+    connection.commit()
+    await ctx.send(f'{member.mention}, вы получили 200 деняк')
 
 bot.run(settings['TOKEN'])
     
