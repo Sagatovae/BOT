@@ -96,8 +96,63 @@ async def startgame(ctx):
     instructions = await ctx.send('Да начнется игра:')
     previous_message = instructions
 
-@bot.command()
-async def bet(ctx, *, new_text):
+# @bot.command()
+# async def bet(ctx, *, new_text):
+#     global previous_message
+#     global user_messages
+#     valid_input = new_text.isdigit() and 0 <= int(new_text) <= 36 or int(new_text) == 00
+#     if valid_input:
+#         if ctx.author.id not in user_messages:
+#             user_messages[ctx.author.id] = new_text
+#         else:
+#             user_messages[ctx.author.id] += f"\n{new_text}"
+
+#         await ctx.message.delete()  # Удаляем сообщение пользователя
+
+#         if previous_message:
+#             updated_text = previous_message.content
+#             for user_id, message in user_messages.items():
+#                 user = bot.get_user(user_id)
+#                 updated_text += f"\n\n**{user.name}:**\n{message}"
+
+#             await previous_message.edit(content=updated_text)
+#         else:
+#             await ctx.send("Предыдущее сообщение бота не найдено.")
+#     else:
+#         await ctx.send("Неверный ввод. Пожалуйста, введите число от 0 (00) до 36.")
+
+client = discord.Client(intents=intents)
+
+# @bot.command()
+# async def on_message(ctx):
+#     colors = ["black", "red"]
+#     radius = 6  
+#     chessboard = ""
+#     for row in range(-radius, radius + 1):
+#         for col in range(-radius, radius + 1):
+#             distance = math.sqrt(row**2 + col**2)
+#             if distance <= radius:
+#                 if distance <= radius - 1:
+#                     chessboard += ":brown_square:"
+#                 else:
+#                     if row == 0 and col == 0:
+#                         chessboard += ":white_circle:"
+#                     else:
+#                         color = colors[int(distance) % 2]
+#                         chessboard += f":{color}_circle:"
+#             else:
+#                 chessboard += ":brown_square:"
+#         chessboard += "\n"
+
+#     embed = discord.Embed(title="Рулетка", description=chessboard, color=discord.Color.default())
+#     await ctx.send(embed=embed)
+
+@bot.slash_command(name="bid", description='Ставка')
+async def bid(*, new_text, ctx, foo: Option(str, #тип данных ввода
+                                 name='bid', #имя опции (необязательно)
+                                 description='0(00) - 36', #описание опции
+                                 required=True)): #обязательность введения параметра для команды
+    pass
     global previous_message
     global user_messages
     valid_input = new_text.isdigit() and 0 <= int(new_text) <= 36 or int(new_text) == 00
@@ -120,40 +175,6 @@ async def bet(ctx, *, new_text):
             await ctx.send("Предыдущее сообщение бота не найдено.")
     else:
         await ctx.send("Неверный ввод. Пожалуйста, введите число от 0 (00) до 36.")
-
-client = discord.Client(intents=intents)
-
-@bot.command()
-async def on_message(ctx):
-    colors = ["black", "red"]
-    radius = 6  
-    chessboard = ""
-    for row in range(-radius, radius + 1):
-        for col in range(-radius, radius + 1):
-            distance = math.sqrt(row**2 + col**2)
-            if distance <= radius:
-                if distance <= radius - 1:
-                    chessboard += ":brown_square:"
-                else:
-                    if row == 0 and col == 0:
-                        chessboard += ":white_circle:"
-                    else:
-                        color = colors[int(distance) % 2]
-                        chessboard += f":{color}_circle:"
-            else:
-                chessboard += ":brown_square:"
-        chessboard += "\n"
-
-    embed = discord.Embed(title="Рулетка", description=chessboard, color=discord.Color.default())
-    await ctx.send(embed=embed)
-
-@bot.slash_command(name="sgame", description='Описание команды')
-async def sgame(ctx, foo: Option(str, #тип данных ввода
-                                 name='роль', #имя опции (необязательно)
-                                 description='Bar', #описание опции
-                                 required=True)): #обязательность введения параметра для команды
-    pass
-
 
 # @bot.command()
 # async def bet(ctx, bet):
