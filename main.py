@@ -218,7 +218,7 @@ async def work(ctx, member: discord.Member = None):
         member = ctx.author
     cursor.execute("UPDATE users SET cash = cash + 200 WHERE id = {}".format(member.id))
     connection.commit()
-    await ctx.send(f'{member.mention}, **вы получили 200 :leaves:**!')
+    await ctx.send(f'{member.mention}, **вы получили 200! Ваш баланс составляет {cursor.execute("SELECT cash FROM users WHERE id = {}".format(ctx.author.id)).fetchone()[0]} :leaves:**')
     await ctx.message.delete()
 @bot.event
 async def on_command_error(ctx, error):
@@ -233,7 +233,7 @@ async def salary(ctx, member: discord.Member = None):
         member = ctx.author
     cursor.execute("UPDATE users SET cash = cash + 5000 WHERE id = {}".format(member.id))
     connection.commit()
-    await ctx.send(f'{member.mention}, **вы получили 5000 :leaves:**!')
+    await ctx.send(f'{member.mention}, **вы получили 5000! Ваш баланс составляет {cursor.execute("SELECT cash FROM users WHERE id = {}".format(ctx.author.id)).fetchone()[0]} :leaves:**')
     await ctx.message.delete()
 @bot.event
 async def on_command_error(ctx, error):
@@ -243,21 +243,15 @@ async def on_command_error(ctx, error):
 
 @bot.slash_command(name='gift', description='Подарить деньги')
 async def gift(ctx, recipient: Option(str, name='получатель', description='Получатель', required=True), amount: Option(int, name='сумма', description='Сумма подарка', required=True)):
-    recipient_member = None
-    for member in ctx.guild.members:
-        if member.name.lower() == recipient.lower():
-            recipient_member = member
-            break
-
-    if recipient_member is None:
-        await ctx.send(f"Указанный получатель не найден.")
+    numbers = ''.join(c if c.isdigit() else ' ' for c in recipient).split()
+    member = ''.join(numbers)
+    if amount < 1:
+        await ctx.send(f"**Укажите сумму подарка больше 1:leaves:**")
     else:
-        if amount < 1:
-            await ctx.send(f"Укажите сумму подарка больше 1.")
-        else:
-            cursor.execute("UPDATE users SET cash = cash + {} WHERE id = {}".format(gift, recipient_member.id))
-            cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(gift, ctx.author.id))
-            connection.commit()
-            await ctx.send(f"Вы успешно подарили {amount} денег пользователю {recipient}.")
+        cursor.execute("UPDATE users SET cash = cash + {} WHERE id = {}".format(amount, member))
+        cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(amount, ctx.author.id))
+        connection.commit()
+        await ctx.send(f"**{ctx.author.mention}, вы успешно подарили {amount} пользователю {recipient}. Ваш баланс составляет {cursor.execute('SELECT cash FROM users WHERE id = {}'.format(ctx.author.id)).fetchone()[0]} :leaves:**")
+
 # Запуск бота
 bot.run(settings['TOKEN'])
