@@ -98,18 +98,22 @@ class MyView(discord.ui.View):
             self.button_clicked.remove(user_id)
             button.label = f"Нажало: {len(self.button_clicked)}"
             await interaction.response.edit_message(view=self)
-            await interaction.response.send_message("Вы больше не нажимаете на кнопку!")
         else:
-            self.button_clicked.add(user_id)
-            button.label = f"Нажало: {len(self.button_clicked)}"
-            await interaction.response.edit_message(view=self)
-            await interaction.response.send_message("Вы нажимаете на кнопку!")
+            if user_id in user_bets:
+                self.button_clicked.add(user_id)
+                button.label = f"Нажало: {len(self.button_clicked)}"
+                await interaction.response.edit_message(view=self)
+            else:
+                await interaction.response.send_message("Иди нахуй. (и сделай ставку пжпжпжпжпжпжжпжпж).")
 
+
+game_ended = False
 
 @bot.slash_command(name='roulette', description='Рулетка')
 async def roulette(ctx):
     global previous_message
-    
+    embed = discord.Embed(color=discord.Color.green())
+
     if previous_message:
         await previous_message.delete_original_message()
 
@@ -120,73 +124,83 @@ async def roulette(ctx):
     button.label = "Нажало: 0"
     previous_message = instructions
     await instructions.edit(view=view)
-
+user_bets = {}
+game_choice = None  # Создаем атрибут game_choice
+bid = None
 @bot.slash_command(name="bet", description='Ставка')
-async def bet(ctx, bid: Option(int, name='bid', description='0(00) - 36', required=True), bet: Option(int, name='bet', description='Сумма ставки', required=True), member: discord.Member = None):
+async def bet(ctx, bid: Option(str, name='bid', description='0(00) - 36', required=True), bet: Option(int, name='bet', description='Сумма ставки', required=True), member: discord.Member = None):
     global previous_message
-    global user_messages
-
+    global valid_input
     if member is None:
         member = ctx.author
-
+    embed = discord.Embed(color=discord.Color.green())
     balance = cursor.execute("SELECT cash FROM users WHERE id = {}".format(ctx.author.id)).fetchone()[0]
-    
-    if balance - bet > 0:
-        valid_input = bid in [0, 00] or (0 < bid < 37)
-        if valid_input:
-            if ctx.author.id not in user_messages:
-                user_messages[ctx.author.id] = f"{str(bid)} - {str(bet)}"
-                cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(int(bet), member.id))
-                view = MyView()
-                button = view.children[0]
-                button.disabled = False
-                button.label = "Нажало: 0"
-                if previous_message:
-                    await previous_message.edit(content='Да начнется игра:', view=view)
-                else:
-                    previous_message = await ctx.send('Да начнется игра:', view=view)
-            else:
-                user_messages[ctx.author.id] += f"\n{str(bid)} - {str(bet)}"
-                cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(int(bet), member.id))
-            connection.commit()
-            if previous_message:
-                updated_text = previous_message.content
-                for user_id, message in user_messages.items():
-                    user = bot.get_user(user_id)
-                    updated_text += f"\n\n**{user.name}:**\n{message}"
 
-                await previous_message.edit(content=updated_text)
+    if balance - bet > 0:
+        valid_input = int(bid) in [0, 00] or (0 < int(bid) < 37)
+        if valid_input:
+            if ctx.author.id not in user_bets:
+                user_bets[ctx.author.id] = {}
+
+            if bid not in user_bets[ctx.author.id]:
+                user_bets[ctx.author.id][bid] = 0  
+
+            user_bets[ctx.author.id][bid] += bet
+            
+            if len(user_bets[ctx.author.id]) <= 3:
+                cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(int(bet), member.id))
+                connection.commit()
+
+                if previous_message:
+                    updated_text = previous_message.content
+                    for user_id, bets in user_bets.items():
+                        user = bot.get_user(user_id)
+                        bet_messages = "\n".join([f"{str(bid)} - {str(total_bet)}" for bid, total_bet in bets.items()])
+                        updated_text += f"\n\n**{user.name}:**\n{bet_messages}"
+
+                    await previous_message.edit(content=updated_text)
+                else:
+                    await ctx.respond("Предыдущее сообщение не найдено.")
             else:
-                await ctx.respond("Предыдущее сообщение не найдено.")
+                await ctx.respond("Вы уже сделали максимальное количество ставок.")
         else:
             await ctx.respond("Неверный ввод. Пожалуйста, введите число от 0 (00) до 36.")
     else:
         await ctx.respond("На вашем балансе недостаточно средств.")
 
-# @bot.command()
-# async def game(ctx, member: discord.Member = None):
-#     if ctx.bot.game_choice is None:
-#         await ctx.send('Используйте команду !start, чтобы начать игру.')
-#         return
-#     await ctx.send("Начало")
+@bot.slash_command(name="start", description='Старт')
+async def start(ctx, member: discord.Member = None):
+    global user_bets
+    if member is None:
+        member = ctx.author
 
-#     rand = random.randint(1, 4)
+    if ctx.author.id in user_bets and len(user_bets[ctx.author.id]) > 0:
+        valid_bets = user_bets[ctx.author.id]
+        rand = random.choice([00, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36])
+        embed = discord.Embed(title="Результат", color=discord.Color.green())
+        embed.add_field(name="Загаданное число:", value=str(rand), inline=False)
 
-#     if member is None:
-#         member = ctx.author
+        for user_id, bets in user_bets.items():
+            user = bot.get_user(user_id)
 
-#     await ctx.send(f'Загаданное число: {rand}')
-
-#     if ctx.bot.game_choice == rand:
-#         cursor.execute("UPDATE users SET cash = cash + 20 WHERE id = {}".format(member.id))
-#         connection.commit()
-#         await ctx.send(f'{member.mention}, вы выиграли! Загаданное число: {rand}')
-#     else:
-#         cursor.execute("UPDATE users SET cash = cash - 20 WHERE id = {}".format(member.id))
-
-#         connection.commit()
-#         await ctx.send(f'{member.mention}, вы проиграли! Загаданное число: {rand}')
-# КОНЕЦ ФУНКЦИЙ СВЯЗАННЫХ С РУЛЕТКОЙ    
+        if user_id == ctx.author.id:
+            for bid, bet_amount in bets.items():
+                if bid in valid_bets:
+                    winnings = 0
+                    if bid == rand:
+                        winnings = bet_amount * 36
+                    embed.add_field(name=f"{user.name} (Ваше число: {bid})", value=f"Ставка: {bet_amount}\nВыигрыш: {winnings}", inline=False)
+        else:
+            for bid, bet_amount in bets.items():
+                if bid in valid_bets:
+                    winnings = 0
+                    if bid == rand:
+                        winnings = bet_amount * 36
+                    embed.add_field(name=f"{user.name} (Ваше число: {bid})", value=f"Ставка: {bet_amount}\nВыигрыш: {winnings}", inline=False)
+    
+        await ctx.respond(embed=embed)
+    else:
+        await ctx.respond("Вы не сделали все необходимые ставки или не нажали на кнопку.")
 
 
 # КОММАНДА !HELP 
@@ -218,7 +232,7 @@ async def work(ctx, member: discord.Member = None):
         member = ctx.author
     cursor.execute("UPDATE users SET cash = cash + 200 WHERE id = {}".format(member.id))
     connection.commit()
-    await ctx.send(f'{member.mention}, **вы получили 200 :leaves:**!')
+    await ctx.send(f'{member.mention}, **вы получили 200! Ваш баланс составляет {cursor.execute("SELECT cash FROM users WHERE id = {}".format(ctx.author.id)).fetchone()[0]} :leaves:**')
     await ctx.message.delete()
 @bot.event
 async def on_command_error(ctx, error):
@@ -233,7 +247,7 @@ async def salary(ctx, member: discord.Member = None):
         member = ctx.author
     cursor.execute("UPDATE users SET cash = cash + 5000 WHERE id = {}".format(member.id))
     connection.commit()
-    await ctx.send(f'{member.mention}, **вы получили 5000 :leaves:**!')
+    await ctx.send(f'{member.mention}, **вы получили 5000! Ваш баланс составляет {cursor.execute("SELECT cash FROM users WHERE id = {}".format(ctx.author.id)).fetchone()[0]} :leaves:**')
     await ctx.message.delete()
 @bot.event
 async def on_command_error(ctx, error):
@@ -242,22 +256,21 @@ async def on_command_error(ctx, error):
         await ctx.send(f'**Следущая зарплата через {retry_after}**')
 
 @bot.slash_command(name='gift', description='Подарить деньги')
-async def gift(ctx, recipient: Option(str, name='получатель', description='Получатель', required=True), amount: Option(int, name='сумма', description='Сумма подарка', required=True)):
-    recipient_member = None
-    for member in ctx.guild.members:
-        if member.name.lower() == recipient.lower():
-            recipient_member = member
-            break
-
-    if recipient_member is None:
-        await ctx.send(f"Указанный получатель не найден.")
+async def gift(ctx, recipient: Option(str, name='получатель', description='Получатель', required=True), amount: Option(int, name='сумма', description='Сумма подарка', required=True), reason: Option(str, name='комментарий', description='Комментарий', required=False)):
+    numbers = ''.join(c if c.isdigit() else ' ' for c in recipient).split()
+    member = ''.join(numbers)
+    if amount < 1:
+        await ctx.send(f"**Укажите сумму подарка больше 1:leaves:**")
     else:
-        if amount < 1:
-            await ctx.send(f"Укажите сумму подарка больше 1.")
+        cursor.execute("UPDATE users SET cash = cash + {} WHERE id = {}".format(amount, member))
+        cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(amount, ctx.author.id))
+        connection.commit()
+        if reason:
+            await ctx.send(f"**{ctx.author.mention}, вы успешно подарили {amount} пользователю {recipient} по причине: {reason}. Ваш баланс составляет {cursor.execute('SELECT cash FROM users WHERE id = {}'.format(ctx.author.id)).fetchone()[0]} :leaves:.**")
         else:
-            cursor.execute("UPDATE users SET cash = cash + {} WHERE id = {}".format(gift, recipient_member.id))
-            cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(gift, ctx.author.id))
-            connection.commit()
-            await ctx.send(f"Вы успешно подарили {amount} денег пользователю {recipient}.")
+            await ctx.send(f"**{ctx.author.mention}, вы успешно подарили {amount} пользователю {recipient}. Ваш баланс составляет {cursor.execute('SELECT cash FROM users WHERE id = {}'.format(ctx.author.id)).fetchone()[0]} :leaves:.**")
+            
+            
+
 # Запуск бота
 bot.run(settings['TOKEN'])
