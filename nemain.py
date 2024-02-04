@@ -115,128 +115,6 @@ class MyView(discord.ui.View):
 
 game_ended = False
 
-@bot.slash_command(name='roulette', description='Рулетка')
-async def roulette(ctx):
-    await ctx.defer()
-    global previous_message
-
-    if previous_message:
-        try:
-            await previous_message.delete()
-        except discord.NotFound:
-            pass
-
-    instructions = await ctx.respond('Да начнется игра:')
-    view = MyView()
-    button = view.children[0]
-    button.disabled = False
-    button.label = "Нажало: 0"
-    previous_message = instructions
-    await instructions.edit(view=view)
-    user_bets.clear()
-user_bets = {}
-game_choice = None  # Создаем атрибут game_choice
-bid = None
-bet = None
-@bot.slash_command(name="bet", description='Ставка')
-async def bet(ctx, bid: Option(str, name='bid', description='0(00) - 36', required=True), bet: Option(int, name='bet', description='Сумма ставки', required=True), member: discord.Member = None):
-    global previous_message
-    global valid_input
-    if member is None:
-        member = ctx.author
-    embed = discord.Embed(color=discord.Color.green())
-    balance = cursor.execute("SELECT cash FROM users WHERE id = {}".format(ctx.author.id)).fetchone()[0]
-    if balance - bet > 0:
-        if bet >= 25: #Ограничение в ставке в 25 шекелей
-            valid_input = int(bid) in [0, 00] or (0 < int(bid) < 37)
-            if valid_input:
-                if ctx.author.id not in user_bets:
-                    user_bets[ctx.author.id] = {}
-
-                if bid not in user_bets[ctx.author.id]:
-                    user_bets[ctx.author.id][bid] = 0  
-
-                user_bets[ctx.author.id][bid] += bet
-                
-                if len(user_bets[ctx.author.id]) <= 3:
-                    cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(int(bet), member.id))
-                    connection.commit()
-
-                    if previous_message:
-                        await ctx.defer()
-                        updated_text = previous_message.content
-                        for user_id, bets in user_bets.items():
-                            user = bot.get_user(user_id)
-                            bet_messages = "\n".join([f"{str(bid)} - {str(total_bet)}" for bid, total_bet in bets.items()])
-                            updated_text += f"\n\n**{user.name}:**\n{bet_messages}"
-                        await previous_message.edit(content=updated_text)
-                        smt = await ctx.respond("обработка...")
-                        await smt.delete()
-                    else:
-                        msg = await ctx.send("Предыдущее сообщение не найдено.") 
-                else:
-                    msg = await ctx.send("Вы уже сделали максимальное количество ставок.")
-            else:
-                msg = await ctx.send("Неверный ввод. Пожалуйста, введите число от 0(00) до 36.")
-        else:
-            msg = await ctx.send("Минимальная ставка составляет 25:leaves:.")
-    else:
-        msg = await ctx.respond("У вас недостаточно средств.")
-    await asyncio.sleep(2)
-    await msg.delete()
-    await ctx.defer()
-    smt = await ctx.respond("обработка...")
-    await smt.delete()
-
-
-@bot.slash_command(name="start", description='Результат')
-async def start(ctx, member: discord.Member = None):
-    await ctx.defer()
-    global previous_message
-
-    if member is None:
-        member = ctx.author
-
-    if previous_message:
-        rand = random.choice(['00', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36'])
-        updated_text = previous_message.content
-        updated_text = updated_text.replace("Да начнется игра:", f"Загаданное число: {str(rand)}")
-        updated_text = updated_text.replace("Нажало: 0", "")
-        updated_text = updated_text.replace("Нажало: 1", "")
-
-        bet_messages = []
-        for user_id, bets in user_bets.items():
-            user = bot.get_user(user_id)
-            if user is not None:
-                user_bet_messages = []
-                total_winnings = 0
-                for bid, bet in bets.items():
-                    winnings = 0
-                    if str(bid) == str(rand):
-                        winnings = bet * 36
-                        cursor.execute("UPDATE users SET cash = cash + {} WHERE id = {}".format(winnings, user_id))
-                    user_bet_messages.append(f"Число: {bid}")
-                    total_winnings += winnings
-                if user_bet_messages:
-                    user_bet_messages_str = "\n".join(user_bet_messages)
-                    bet_messages.append(f"**{user.name}:**\n{user_bet_messages_str}\nОбщий выигрыш: {total_winnings} :leaves:")
-                smt = await ctx.respond("обработка...")
-                await smt.delete()                
-        if bet_messages:
-            bet_messages_str = "\n\n".join(bet_messages)
-            updated_text += f"\n\n{bet_messages_str}"
-        else:   
-            await ctx.respond("Ни один игрок не сделал ставку или не нажал на кнопку.")
-
-        await previous_message.edit(content=updated_text, view=None)
-        user_bets.clear()  # Очищаем словарь с ставками после вывода результатов
-
-        await asyncio.sleep(8)
-        await previous_message.delete()
-
-    else:
-        await ctx.respond("Предыдущее сообщение не найдено.")
-
 # КОММАНДА !HELP 
 @bot.command()
 async def help(ctx):
@@ -340,6 +218,146 @@ async def gift(ctx, recipient: Option(str, name='получатель', descript
         await asyncio.sleep(5)
         await msg.delete()
             
+
+user_bets = {}
+
+class MyModal(discord.ui.Modal):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.add_item(discord.ui.InputText(label="Bid 0(00) - 36"))
+        self.add_item(discord.ui.InputText(label="Bet"))
+
+    async def callback(self, interaction: discord.Interaction):
+        bid = self.children[0].value
+        bet = self.children[1].value
+
+        embed = discord.Embed(title="Modal Results")
+        embed.add_field(name="Bid 0(00) - 36", value=bid)
+        embed.add_field(name="Bet", value=bet)
+
+        message = await interaction.response.fetch_message()
+        await message.edit(content="Рулетка началась:", embed=embed)
+
+
+@bot.slash_command(name='roulette', description='Рулетка')
+async def roulette(ctx):
+    await ctx.defer()
+
+    modal = MyModal(title="Modal")
+    await ctx.send_modal(modal)
+
+
+@bot.slash_command(name="bet", description='Ставка')
+async def bet(ctx, member: discord.Member = None):
+    global previous_message, user_bets
+    if member is None:
+        member = ctx.author
+
+    modal = MyModal(title="Modal")
+    await ctx.send_modal(modal)
+
+    def check(interaction: discord.Interaction):
+        return interaction.user == ctx.author and interaction.message == interaction.message
+
+    try:
+        interaction = await bot.wait_for("interaction", check=check, timeout=60.0)
+        bid = interaction.data["values"]["Bid 0(00) - 36"]
+        bet = interaction.data["values"]["Bet"]
+
+        embed = discord.Embed(color=discord.Color.green())
+        balance = cursor.execute("SELECT cash FROM users WHERE id = {}".format(ctx.author.id)).fetchone()[0]
+        if balance - bet > 0:
+            if bet >= 25:  # Ограничение в ставке в 25 шекелей
+                valid_input = int(bid) in [0, 00] or (0 < int(bid) < 37)
+                if valid_input:
+                    if ctx.author.id not in user_bets:
+                        user_bets[ctx.author.id] = {}
+
+                    if bid not in user_bets[ctx.author.id]:
+                        user_bets[ctx.author.id][bid] = 0
+
+                    user_bets[ctx.author.id][bid] += bet
+
+                    if len(user_bets[ctx.author.id]) <= 3:
+                        cursor.execute("UPDATE users SET cash = cash - {} WHERE id = {}".format(int(bet), member.id))
+                        connection.commit()
+
+                        if previous_message:
+                            await ctx.defer()
+                            updated_text = previous_message.content
+                            for user_id, bets in user_bets.items():
+                                user = bot.get_user(user_id)
+                                bet_messages = "\n".join([f"{str(bid)} - {str(total_bet)}" for bid, total_bet in bets.items()])
+                                updated_text += f"\n\n**{user.name}:**\n{bet_messages}"
+                            await previous_message.edit(content=updated_text)
+                            smt = await ctx.respond("обработка...")
+                            await smt.delete()
+                        else:
+                            msg = await ctx.send("Предыдущее сообщение не найдено.")
+                    else:
+                        msg = await ctx.send("Вы уже сделали максимальное количество ставок.")
+                else:
+                    msg = await ctx.send("Неверный ввод. Пожалуйста, введите число от 0 (00) до 36.")
+            else:
+                msg = await ctx.send("Минимальная ставка составляет 25:leaves:")
+        else:
+            msg = await ctx.respond("Бедняжка")
+        await asyncio.sleep(2)
+        await msg.delete()
+        await ctx.defer()
+        smt = await ctx.respond("обработка...")
+        await smt.delete()
+    except asyncio.TimeoutError:
+        await ctx.send("Время ожидания истекло.")
+
+@bot.slash_command(name="start", description='Старт')
+async def start(ctx, member: discord.Member = None):
+    await ctx.defer()
+    global previous_message
+
+    if member is None:
+        member = ctx.author
+
+    if previous_message:
+        rand = random.choice(['00', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36'])
+        updated_text = previous_message.content
+        updated_text = updated_text.replace("Да начнется игра:", f"Загаданное число: {str(rand)}")
+        updated_text = updated_text.replace("Нажало: 0", "")
+        updated_text = updated_text.replace("Нажало: 1", "")
+
+        bet_messages = []
+        for user_id, bets in user_bets.items():
+            user = bot.get_user(user_id)
+            if user is not None:
+                user_bet_messages = []
+                total_winnings = 0
+                for bid, bet in bets.items():
+                    winnings = 0
+                    if str(bid) == str(rand):
+                        winnings = bet * 36
+                        cursor.execute("UPDATE users SET cash = cash + {} WHERE id = {}".format(winnings, user_id))
+                    user_bet_messages.append(f"Число: {bid}")
+                    total_winnings += winnings
+                if user_bet_messages:
+                    user_bet_messages_str = "\n".join(user_bet_messages)
+                    bet_messages.append(f"**{user.name}:**\n{user_bet_messages_str}\nОбщий выигрыш: {total_winnings} :leaves:")
+                smt = await ctx.respond("обработка...")
+                await smt.delete()                
+        if bet_messages:
+            bet_messages_str = "\n\n".join(bet_messages)
+            updated_text += f"\n\n{bet_messages_str}"
+        else:
+            await ctx.respond("Ни один игрок не сделал ставку или не нажал на кнопку.")
+
+        await previous_message.edit(content=updated_text, view=None)
+        user_bets.clear()  # Очищаем словарь с ставками после вывода результатов
+
+        await asyncio.sleep(8)
+        await previous_message.delete()
+
+    else:
+        await ctx.respond("Предыдущее сообщение не найдено.")
 
 # Запуск бота
 bot.run(settings['TOKEN'])
